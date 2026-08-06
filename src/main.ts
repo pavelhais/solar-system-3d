@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { buildSolarSystem, createOrbitLine, type SceneBody } from './scene/sceneBuilder';
+import { createKuiperBelt } from './scene/kuiperBelt';
 import { createInfoPanel, hideInfoPanel, showInfoPanel } from './ui/infoPanel';
 import { createTimeControls } from './ui/timeControls';
 import { createNavigationPanel } from './ui/navigationPanel';
@@ -49,6 +50,8 @@ for (const body of bodies) {
     scene.add(createOrbitLine(body.orbitRadiusScene));
   }
 }
+
+scene.add(createKuiperBelt());
 
 createInfoPanel(app, () => {
   focusedBody = null;

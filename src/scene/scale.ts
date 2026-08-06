@@ -8,10 +8,13 @@ const AU_KM = 149.598e6;
 const AU_SCENE_UNITS = 30;
 const DISTANCE_POWER = 0.6;
 
+export function orbitRadiusFromAU(au: number): number {
+  return Math.pow(au, DISTANCE_POWER) * AU_SCENE_UNITS;
+}
+
 export function orbitRadiusFromSun(distanceKm: number): number {
   if (distanceKm <= 0) return 0;
-  const au = distanceKm / AU_KM;
-  return Math.pow(au, DISTANCE_POWER) * AU_SCENE_UNITS;
+  return orbitRadiusFromAU(distanceKm / AU_KM);
 }
 
 // --- Velikosti těles (poloměry) ---

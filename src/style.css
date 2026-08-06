@@ -64,6 +64,12 @@ canvas {
   color: #c9b8e8;
 }
 
+.body-label--easter-egg {
+  font-size: 10px;
+  font-style: italic;
+  color: #ffd77a;
+}
+
 .info-panel {
   position: absolute;
   top: 16px;

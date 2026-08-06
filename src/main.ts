@@ -3,7 +3,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { buildSolarSystem, createOrbitLine, type SceneBody } from './scene/sceneBuilder';
 import { createKuiperBelt } from './scene/kuiperBelt';
-import { createInfoPanel, hideInfoPanel, showInfoPanel } from './ui/infoPanel';
+import { loadMillenniumFalcon, FALCON_LABEL_ID } from './scene/millenniumFalcon';
+import { loadDeathStar, DEATH_STAR_LABEL_ID } from './scene/deathStar';
+import { createInfoPanel, hideInfoPanel, showInfoPanel, showCustomInfoPanel } from './ui/infoPanel';
 import { createTimeControls } from './ui/timeControls';
 import { createNavigationPanel } from './ui/navigationPanel';
 import './style.css';
@@ -53,6 +55,101 @@ for (const body of bodies) {
 
 scene.add(createKuiperBelt());
 
+// Easter egg: Millennium Falcon na vlastní (fiktivní) dráze kolem Země.
+// falconOrbitPivot sleduje v animate() aktuální pozici Země ve scéně, takže
+// oběžná dráha zůstává centrovaná na planetu i při jejím pohybu kolem Slunce.
+const earthBody = bodyMap.get('earth');
+const FALCON_ORBIT_RADIUS = 0.75;
+const FALCON_ORBIT_PERIOD_DAYS = 3;
+// Pokud model po načtení míří "zádí napřed" nebo bokem, doladit tímto úhlem
+// (stupně) - viz vysvětlení u loadMillenniumFalcon().then() níže. Model má
+// nativně příď na +X, tečna dráhy v lokálním prostoru pivotu směřuje k -Z,
+// proto +90°.
+const FALCON_NOSE_OFFSET_DEG = 90;
+// Náklon (roll) kolem přídě-záď osy (lokální X - viz výše), aby loď letěla
+// "břichem" (spodkem) k planetě místo břichem dolů/nahoru mimo rovinu dráhy.
+const FALCON_ROLL_OFFSET_DEG = 90;
+// Klopení (pitch) kolem příčné/křídlové osy (lokální Z) - naklápí příď
+// nahoru/dolů mimo rovinu dráhy. Dřív byly roll a pitch omylem prohozené
+// (obě navěšené na osy, které při FALCON_NOSE_OFFSET_DEG=90° vycházely na
+// stejnou skutečnou otočnou osu lodi) - proto vypadaly jako totéž.
+const FALCON_PITCH_OFFSET_DEG = 0;
+const FALCON_INFO = {
+  title: 'Millennium Falcon',
+  subtitle: 'YT-1300f Corellian light freighter',
+  rows: [
+    ['Kapitán', 'Han Solo'],
+    ['Posádka', 'Han Solo, Chewbacca'],
+    ['Délka', '34,75 m'],
+    ['Pohon', 'hyperpohon třídy 0,5'],
+    ['Slavný výkon', 'Kesselský běh zkrácen na necelých 12 parseků (nejkratší známá trasa)'],
+  ] as [string, string][],
+  description:
+    'Silně upravený pašerácký nákladní člun, v rukou správného pilota nejrychlejší loď v galaxii. Do sluneční soustavy zabloudila jako easter egg tohoto modelu.',
+};
+const falconInitialAngle = Math.random() * Math.PI * 2;
+const falconOrbitPivot = new THREE.Object3D();
+scene.add(falconOrbitPivot);
+let falconGroup: THREE.Group | null = null;
+loadMillenniumFalcon()
+  .then((falcon) => {
+    falcon.position.set(FALCON_ORBIT_RADIUS, 0, 0);
+    // Loď je potomkem falconOrbitPivot, takže při jeho rotaci automaticky
+    // "obtáčí" i svou lokální orientaci - žádná další rotace v animate()
+    // není potřeba.
+    // Roll (kolem X, přídě) a pitch (kolem Z, křídel) se aplikují nejdřív,
+    // v původní orientaci modelu (příď +X, nahoru +Y) - teprve na výsledek
+    // se aplikuje yaw, který přídí namíří ve směru letu. Kdyby se pořadí
+    // otočilo, roll a pitch by (kvůli 90° yaw) skončily na stejné ose - to
+    // byl původní bug.
+    const rollQ = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0),
+      THREE.MathUtils.degToRad(FALCON_ROLL_OFFSET_DEG),
+    );
+    const pitchQ = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 0, 1),
+      THREE.MathUtils.degToRad(FALCON_PITCH_OFFSET_DEG),
+    );
+    const yawQ = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      THREE.MathUtils.degToRad(FALCON_NOSE_OFFSET_DEG),
+    );
+    falcon.quaternion.copy(yawQ).multiply(pitchQ).multiply(rollQ);
+    falconOrbitPivot.add(falcon);
+    falconGroup = falcon;
+  })
+  .catch((err) => console.error('Nepodařilo se načíst model Millennium Falconu:', err));
+
+// Easter egg: Hvězda smrti na vlastní (fiktivní) dráze kolem Marsu. Stejný
+// princip sledování planety jako u falconOrbitPivot výše.
+const marsBody = bodyMap.get('mars');
+const DEATH_STAR_ORBIT_RADIUS = 0.55;
+const DEATH_STAR_ORBIT_PERIOD_DAYS = 6;
+const DEATH_STAR_INFO = {
+  title: 'Hvězda smrti',
+  subtitle: 'DS-1 Orbital Battle Station',
+  rows: [
+    ['Velitel', 'Grand Moff Tarkin'],
+    ['Posádka', '~1 000 000 (důstojníci, technici, stormtroopeři)'],
+    ['Průměr', '160 km'],
+    ['Výzbroj', 'superlaser schopný zničit celou planetu'],
+    ['Slavná slabina', 'dvoumetrový výfukový otvor termálního výtahu'],
+  ] as [string, string][],
+  description:
+    'Pohyblivá bojová stanice velikosti malého měsíce, schopná jediným výstřelem zničit planetu. Tahle kopie zabloudila na oběžnou dráhu Marsu jako další easter egg tohoto modelu.',
+};
+const deathStarInitialAngle = Math.random() * Math.PI * 2;
+const deathStarOrbitPivot = new THREE.Object3D();
+scene.add(deathStarOrbitPivot);
+let deathStarGroup: THREE.Group | null = null;
+loadDeathStar()
+  .then((deathStar) => {
+    deathStar.position.set(DEATH_STAR_ORBIT_RADIUS, 0, 0);
+    deathStarOrbitPivot.add(deathStar);
+    deathStarGroup = deathStar;
+  })
+  .catch((err) => console.error('Nepodařilo se načíst model Hvězdy smrti:', err));
+
 createInfoPanel(app, () => {
   focusedBody = null;
 });
@@ -64,7 +161,8 @@ createTimeControls(app, speedDaysPerSecond, {
   onSpeedChange: (s) => (speedDaysPerSecond = s),
 });
 
-let focusedBody: SceneBody | null = null;
+type Focusable = { mesh: THREE.Object3D };
+let focusedBody: Focusable | null = null;
 const lastWorldPos = new THREE.Vector3();
 
 // referenceDate odpovídá simDays = 0 (okamžiku spuštění aplikace); planety mají
@@ -112,9 +210,52 @@ function selectBody(id: string): void {
   lastWorldPos.copy(worldPos);
 }
 
+function selectFalcon(): void {
+  if (!falconGroup) return;
+
+  showCustomInfoPanel(FALCON_INFO);
+
+  const worldPos = new THREE.Vector3();
+  falconGroup.getWorldPosition(worldPos);
+
+  const dir = camera.position.clone().sub(controls.target);
+  if (dir.lengthSq() < 1e-6) dir.set(0, 0.3, 1);
+  dir.normalize();
+
+  controls.target.copy(worldPos);
+  camera.position.copy(worldPos).addScaledVector(dir, 0.6);
+
+  focusedBody = { mesh: falconGroup };
+  lastWorldPos.copy(worldPos);
+}
+
+function selectDeathStar(): void {
+  if (!deathStarGroup) return;
+
+  showCustomInfoPanel(DEATH_STAR_INFO);
+
+  const worldPos = new THREE.Vector3();
+  deathStarGroup.getWorldPosition(worldPos);
+
+  const dir = camera.position.clone().sub(controls.target);
+  if (dir.lengthSq() < 1e-6) dir.set(0, 0.3, 1);
+  dir.normalize();
+
+  controls.target.copy(worldPos);
+  camera.position.copy(worldPos).addScaledVector(dir, 0.8);
+
+  focusedBody = { mesh: deathStarGroup };
+  lastWorldPos.copy(worldPos);
+}
+
 document.addEventListener('click', (e) => {
   const labelEl = (e.target as HTMLElement).closest('.body-label') as HTMLElement | null;
-  if (labelEl?.dataset.bodyId) {
+  if (!labelEl?.dataset.bodyId) return;
+  if (labelEl.dataset.bodyId === FALCON_LABEL_ID) {
+    selectFalcon();
+  } else if (labelEl.dataset.bodyId === DEATH_STAR_LABEL_ID) {
+    selectDeathStar();
+  } else {
     selectBody(labelEl.dataset.bodyId);
   }
 });
@@ -176,6 +317,24 @@ function animate(): void {
       const periodDays = body.data.rotationPeriodHours / 24;
       body.mesh.rotation.y = (simDays / periodDays) * Math.PI * 2;
     }
+  }
+
+  if (earthBody) {
+    const earthWorldPos = new THREE.Vector3();
+    earthBody.mesh.getWorldPosition(earthWorldPos);
+    falconOrbitPivot.position.copy(earthWorldPos);
+    falconOrbitPivot.rotation.y = falconInitialAngle + (simDays / FALCON_ORBIT_PERIOD_DAYS) * Math.PI * 2;
+  }
+
+  if (marsBody) {
+    const marsWorldPos = new THREE.Vector3();
+    marsBody.mesh.getWorldPosition(marsWorldPos);
+    deathStarOrbitPivot.position.copy(marsWorldPos);
+    // Stanice je potomkem pivotu s nulovou vlastní rotací, takže automaticky
+    // přebírá jeho otočení - lokální směr k počátku pivotu (Mars) tak zůstává
+    // pořád stejný, tzn. vázaná rotace (jeden bod stále míří k Marsu), stejně
+    // jako Měsíc k Zemi.
+    deathStarOrbitPivot.rotation.y = deathStarInitialAngle + (simDays / DEATH_STAR_ORBIT_PERIOD_DAYS) * Math.PI * 2;
   }
 
   if (focusedBody) {

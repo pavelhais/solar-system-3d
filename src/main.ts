@@ -5,6 +5,7 @@ import { buildSolarSystem, createOrbitLine, type SceneBody } from './scene/scene
 import { createKuiperBelt } from './scene/kuiperBelt';
 import { loadMillenniumFalcon, FALCON_LABEL_ID } from './scene/millenniumFalcon';
 import { loadDeathStar, DEATH_STAR_LABEL_ID } from './scene/deathStar';
+import { loadDiscoveryOne, DISCOVERY_LABEL_ID } from './scene/discoveryOne';
 import { createInfoPanel, hideInfoPanel, showInfoPanel, showCustomInfoPanel } from './ui/infoPanel';
 import { createTimeControls } from './ui/timeControls';
 import { createNavigationPanel } from './ui/navigationPanel';
@@ -150,6 +151,45 @@ loadDeathStar()
   })
   .catch((err) => console.error('Nepodařilo se načíst model Hvězdy smrti:', err));
 
+// Easter egg: Discovery One z 2001: Vesmírné odysey na dráze kolem Jupiteru.
+// Jupiter má ve scéně poloměr ~5,5 j. a nejbližší měsíc (Io) obíhá na ~7,1 j.,
+// takže dráha 6,3 j. vede mezerou mezi povrchem a Io. Stejný princip
+// sledování planety jako u falconOrbitPivot.
+const jupiterBody = bodyMap.get('jupiter');
+const DISCOVERY_ORBIT_RADIUS = 6.3;
+const DISCOVERY_ORBIT_PERIOD_DAYS = 1.2;
+// Model má příď na +X, tečna dráhy v lokálním prostoru pivotu míří k -Z
+// (stejně jako u Falconu), proto +90°.
+const DISCOVERY_NOSE_OFFSET_DEG = 90;
+const DISCOVERY_INFO = {
+  title: 'Discovery One',
+  subtitle: 'Meziplanetární loď USA (2001: Vesmírná odysea)',
+  rows: [
+    ['Velitel', 'David Bowman'],
+    ['Posádka', 'Bowman, Frank Poole + 3 vědci v hibernaci'],
+    ['Palubní počítač', 'HAL 9000'],
+    ['Délka', '~140 m'],
+    ['Cíl mise', 'Jupiter - stopa signálu monolitu TMA-1'],
+  ] as [string, string][],
+  description:
+    'Loď z filmu Stanleyho Kubricka (1968) s kulovým velitelským modulem a dlouhou páteří zakončenou jaderným pohonem. Na oběžnou dráhu Jupiteru dorazila jako další easter egg tohoto modelu. „Je mi líto, Dave. Obávám se, že to nemohu udělat."',
+};
+const discoveryInitialAngle = Math.random() * Math.PI * 2;
+const discoveryOrbitPivot = new THREE.Object3D();
+scene.add(discoveryOrbitPivot);
+let discoveryGroup: THREE.Group | null = null;
+loadDiscoveryOne()
+  .then((discovery) => {
+    discovery.position.set(DISCOVERY_ORBIT_RADIUS, 0, 0);
+    discovery.quaternion.setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      THREE.MathUtils.degToRad(DISCOVERY_NOSE_OFFSET_DEG),
+    );
+    discoveryOrbitPivot.add(discovery);
+    discoveryGroup = discovery;
+  })
+  .catch((err) => console.error('Nepodařilo se načíst model Discovery One:', err));
+
 createInfoPanel(app, () => {
   focusedBody = null;
 });
@@ -248,6 +288,25 @@ function selectDeathStar(): void {
   lastWorldPos.copy(worldPos);
 }
 
+function selectDiscovery(): void {
+  if (!discoveryGroup) return;
+
+  showCustomInfoPanel(DISCOVERY_INFO);
+
+  const worldPos = new THREE.Vector3();
+  discoveryGroup.getWorldPosition(worldPos);
+
+  const dir = camera.position.clone().sub(controls.target);
+  if (dir.lengthSq() < 1e-6) dir.set(0, 0.3, 1);
+  dir.normalize();
+
+  controls.target.copy(worldPos);
+  camera.position.copy(worldPos).addScaledVector(dir, 1.2);
+
+  focusedBody = { mesh: discoveryGroup };
+  lastWorldPos.copy(worldPos);
+}
+
 document.addEventListener('click', (e) => {
   const labelEl = (e.target as HTMLElement).closest('.body-label') as HTMLElement | null;
   if (!labelEl?.dataset.bodyId) return;
@@ -255,6 +314,8 @@ document.addEventListener('click', (e) => {
     selectFalcon();
   } else if (labelEl.dataset.bodyId === DEATH_STAR_LABEL_ID) {
     selectDeathStar();
+  } else if (labelEl.dataset.bodyId === DISCOVERY_LABEL_ID) {
+    selectDiscovery();
   } else {
     selectBody(labelEl.dataset.bodyId);
   }
@@ -335,6 +396,13 @@ function animate(): void {
     // pořád stejný, tzn. vázaná rotace (jeden bod stále míří k Marsu), stejně
     // jako Měsíc k Zemi.
     deathStarOrbitPivot.rotation.y = deathStarInitialAngle + (simDays / DEATH_STAR_ORBIT_PERIOD_DAYS) * Math.PI * 2;
+  }
+
+  if (jupiterBody) {
+    const jupiterWorldPos = new THREE.Vector3();
+    jupiterBody.mesh.getWorldPosition(jupiterWorldPos);
+    discoveryOrbitPivot.position.copy(jupiterWorldPos);
+    discoveryOrbitPivot.rotation.y = discoveryInitialAngle + (simDays / DISCOVERY_ORBIT_PERIOD_DAYS) * Math.PI * 2;
   }
 
   if (focusedBody) {
